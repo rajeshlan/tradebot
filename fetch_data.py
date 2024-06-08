@@ -1,5 +1,6 @@
 import ccxt
 import pandas as pd
+import pandas_ta as ta
 import time
 import logging
 
@@ -31,12 +32,63 @@ def fetch_data(exchange, symbol='BTC/USDT'):
         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         logging.info("Fetched OHLCV data for %s", symbol)
+        
+        # Perform technical analysis
+        df = perform_technical_analysis(df)
+        
         return df
     except ccxt.BaseError as ccxt_error:
         logging.error("An error occurred while fetching data: %s", ccxt_error)
         raise ccxt_error
     except Exception as e:
         logging.error("An unexpected error occurred: %s", e)
+        raise e
+
+def perform_technical_analysis(df):
+    try:
+        # Adding technical indicators
+        df['SMA_20'] = ta.sma(df['close'], length=20)
+        df['SMA_50'] = ta.sma(df['close'], length=50)
+        df['RSI'] = ta.rsi(df['close'], length=14)
+        df['MACD'], df['MACD_signal'], df['MACD_hist'] = ta.macd(df['close'], fast=12, slow=26, signal=9)
+        
+        # Log detected patterns
+        logging.info("Calculated SMA, RSI, and MACD indicators")
+        
+        # Detecting bullish or bearish signals
+        detect_signals(df)
+        
+        return df
+    except Exception as e:
+        logging.error("An error occurred during technical analysis: %s", e)
+        raise e
+
+def detect_signals(df):
+    try:
+        # Example signal detection for educational purposes
+        latest = df.iloc[-1]
+        previous = df.iloc[-2]
+        
+        # Simple crossover strategy
+        if previous['SMA_20'] < previous['SMA_50'] and latest['SMA_20'] > latest['SMA_50']:
+            logging.info("Bullish crossover detected")
+        elif previous['SMA_20'] > previous['SMA_50'] and latest['SMA_20'] < latest['SMA_50']:
+            logging.info("Bearish crossover detected")
+        
+        # RSI Overbought/Oversold
+        if latest['RSI'] > 70:
+            logging.info("RSI indicates overbought conditions")
+        elif latest['RSI'] < 30:
+            logging.info("RSI indicates oversold conditions")
+        
+        # MACD Bullish/Bearish signal
+        if previous['MACD'] < previous['MACD_signal'] and latest['MACD'] > latest['MACD_signal']:
+            logging.info("Bullish MACD crossover detected")
+        elif previous['MACD'] > previous['MACD_signal'] and latest['MACD'] < latest['MACD_signal']:
+            logging.info("Bearish MACD crossover detected")
+        
+    except Exception as e:
+        logging.error("An error occurred during signal detection: %s", e)
         raise e
 
 # Example usage
