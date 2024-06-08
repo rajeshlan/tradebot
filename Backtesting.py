@@ -1,7 +1,7 @@
 import ccxt
 import pandas as pd
 import ta
-from synchronize_time import synchronize_time
+from synchronize_exchange_time import synchronize_time
 import logging
 import time
 
@@ -21,7 +21,7 @@ exchange = ccxt.bybit({
 
 # Synchronize time with the exchange
 try:
-    time_offset = synchronize_time(exchange)
+    time_offset = synchronize_time(exchange, 'pool.ntp.org')
     logging.info("Time synchronized with offset: %d", time_offset)
 except ccxt.BaseError as e:
     logging.error("Time synchronization failed: %s", e)
@@ -42,6 +42,10 @@ def fetch_ohlcv(symbol, timeframe='1d', limit=365):
 def calculate_indicators(df):
     df['SMA_50'] = ta.trend.sma_indicator(df['close'], window=50)
     df['SMA_200'] = ta.trend.sma_indicator(df['close'], window=200)
+    df['RSI'] = ta.momentum.rsi(df['close'], window=14)
+    df['MACD'] = ta.trend.macd(df['close'])
+    df['MACD_signal'] = ta.trend.macd_signal(df['close'])
+    df['MACD_diff'] = ta.trend.macd_diff(df['close'])
     return df
 
 # Define the trading strategy
@@ -57,22 +61,31 @@ def trading_strategy(df):
     df['signal'] = signals
     return df
 
+# Calculate performance metrics
+def calculate_performance_metrics(df, balance, btc_balance, initial_balance):
+    final_balance = balance + btc_balance * df['close'].iloc[-1]
+    total_return = (final_balance - initial_balance) / initial_balance
+    max_drawdown = ((df['close'].cummax() - df['close']).max()) / df['close'].cummax().max()
+    logging.info(f"Final Balance: {final_balance} USDT")
+    logging.info(f"Total Return: {total_return * 100:.2f}%")
+    logging.info(f"Max Drawdown: {max_drawdown * 100:.2f}%")
+
 # Backtesting function
 def backtest_strategy(df):
     balance = 1000
+    initial_balance = balance
     btc_balance = 0
     for i in range(len(df)):
         if df['signal'][i] == 'buy' and balance > 0:
             btc_balance = balance / df['close'][i]
             balance = 0
-            print(f"Buy BTC at {df['close'][i]}")
+            logging.info(f"Buy BTC at {df['close'][i]}")
         elif df['signal'][i] == 'sell' and btc_balance > 0:
             balance = btc_balance * df['close'][i]
             btc_balance = 0
-            print(f"Sell BTC at {df['close'][i]}")
+            logging.info(f"Sell BTC at {df['close'][i]}")
     
-    final_balance = balance + btc_balance * df['close'].iloc[-1]
-    print(f"Final Balance: {final_balance} USDT")
+    calculate_performance_metrics(df, balance, btc_balance, initial_balance)
 
 # Fetch data, calculate indicators, apply strategy, and backtest
 try:
@@ -81,4 +94,6 @@ try:
     df = trading_strategy(df)
     backtest_strategy(df)
 except ccxt.BaseError as e:
-    print(f"An error occurred: {e}")
+    logging.error(f"An error occurred: {e}")
+except Exception as e:
+    logging.error(f"An unexpected error occurred: {e}")
