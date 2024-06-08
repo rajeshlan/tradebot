@@ -2,7 +2,7 @@ import ccxt
 import pandas as pd
 import time
 import logging
-from time_sync import synchronize_time
+from synchronize_exchange_time import synchronize_time
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -35,6 +35,7 @@ def fetch_ohlcv(exchange, symbol, timeframe='1h', limit=100, time_offset=0):
         ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit, params=params)
         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        logging.info(f"Fetched OHLCV data for {symbol}")
         return df
     except ccxt.BaseError as e:
         logging.error("Error fetching OHLCV data: %s", e)
@@ -44,6 +45,11 @@ def fetch_ohlcv(exchange, symbol, timeframe='1h', limit=100, time_offset=0):
 def calculate_indicators(df):
     df['SMA_50'] = df['close'].rolling(window=50).mean()
     df['SMA_200'] = df['close'].rolling(window=200).mean()
+    df['EMA_12'] = df['close'].ewm(span=12, adjust=False).mean()
+    df['EMA_26'] = df['close'].ewm(span=26, adjust=False).mean()
+    df['MACD'] = df['EMA_12'] - df['EMA_26']
+    df['MACD_signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
+    df['RSI'] = ta.rsi(df['close'], length=14)  # Using pandas_ta for RSI calculation
     return df
 
 # Define the trading strategy
@@ -58,6 +64,15 @@ def trading_strategy(df):
             signals.append('hold')
     df['signal'] = signals
     return df
+
+# Function to execute trades (placeholder)
+def execute_trade(exchange, symbol, signal):
+    if signal == 'buy':
+        logging.info("Executing Buy Order")
+        # exchange.create_market_buy_order(symbol, amount)
+    elif signal == 'sell':
+        logging.info("Executing Sell Order")
+        # exchange.create_market_sell_order(symbol, amount)
 
 # Main function to orchestrate the workflow
 def main():
@@ -74,6 +89,10 @@ def main():
         df = calculate_indicators(df)
         df = trading_strategy(df)
         
+        # Execute trades based on signals
+        for i in range(len(df)):
+            execute_trade(exchange, 'BTC/USDT', df['signal'][i])
+        
         # Output the resulting DataFrame
         print(df.tail())
         
@@ -83,4 +102,3 @@ def main():
 # Run the main function
 if __name__ == "__main__":
     main()
-
