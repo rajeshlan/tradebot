@@ -2,6 +2,8 @@ import ccxt
 import pandas as pd
 import time
 import logging
+
+import ta
 from synchronize_exchange_time import synchronize_time
 
 # Setup logging
